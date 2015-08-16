@@ -13,19 +13,19 @@ typedef struct {
 	int col, line;
 } Lexeme;
 
-typedef struct Tree {
+typedef struct SyntaxTree {
 	Lexeme *l;
-	struct Tree **child;
+	struct SyntaxTree **child;
 	int nchild;
-} Tree;
+} SyntaxTree;
 
-Tree *makeTree(Lexeme *l);
-void pprintTree(Tree *t);
+SyntaxTree *makeSyntaxTree(Lexeme *l);
+void pprintSyntaxTree(SyntaxTree *t);
 
-typedef struct TList {
-	Tree *t;
-	struct TList *next;
-} TList;
+typedef struct SyntaxTreeList {
+	SyntaxTree *t;
+	struct SyntaxTreeList *next;
+} SyntaxTreeList;
 
 // state of the program
 typedef struct {
@@ -34,11 +34,11 @@ typedef struct {
 	int line, lcol, col;
 	int nestDepth;
 	void *state;
-	Tree *root;
-	TList *nestTrees;
-} State;
+	SyntaxTree *root;
+	SyntaxTreeList *nestTrees;
+} LexerState;
 
-Lexeme *makeLexeme(State *s, int type);
+Lexeme *makeLexeme(LexerState *s, int type);
 void pprintLexeme(Lexeme *l);
 
-Tree *lex(State *s, char *src);
+SyntaxTree *lex(LexerState *s, char *src);

@@ -15,18 +15,18 @@ void repl() {
 	const char *const *prompt = &kPromt;
 	char *line = calloc(sizeof(char), kLineLen);
 	size_t len = kLineLen;
-	State *s = calloc(sizeof(State), 1);
+	LexerState *s = calloc(sizeof(LexerState), 1);
 
 	// repl loop
 	for (;;) {
 		printf("%s", *prompt);
 		size_t r = getline(&line, &len, stdin);
 		if (r != EOF) {
-			Tree *t = lex(s, line);
+			SyntaxTree *t = lex(s, line);
 			if (t == NULL) {
 				prompt = &kMorePromt;
 			} else {
-				pprintTree(t);
+				pprintSyntaxTree(t);
 				printf("\n");
 				prompt = &kPromt;
 			}

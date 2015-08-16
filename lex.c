@@ -1,6 +1,6 @@
 
 // returns 0 on end of string
-static char lnext(State *s) {
+static char lnext(LexerState *s) {
 	s->col++;
 	if (s->s == NULL) {
 		s->s = s->b;
@@ -15,7 +15,7 @@ static char lnext(State *s) {
 	return c;
 }
 
-static void lback(State *s) {
+static void lback(LexerState *s) {
 	s->col--;
 	s->len--;
 	if (s->s[s->len] == '\n') {
@@ -24,18 +24,18 @@ static void lback(State *s) {
 	}
 }
 
-static char lpeek(State *s) {
+static char lpeek(LexerState *s) {
 	char c = lnext(s);
 	lback(s);
 	return c;
 }
 
-static void ldump(State *s) {
+static void ldump(LexerState *s) {
 	s->s = &s->s[s->len];
 	s->len = 0;
 }
 
-static char *lemit(State *s) {
+static char *lemit(LexerState *s) {
 	char *str = calloc(sizeof(char), s->len + 1);
 	strncpy(str, s->s, s->len);
 	s->s = &s->s[s->len];
@@ -46,7 +46,7 @@ static char *lemit(State *s) {
 // str is from lemit,
 // col, line from state,
 // type is from argument
-Lexeme *makeLexeme(State *s, int type) {
+Lexeme *makeLexeme(LexerState *s, int type) {
 	Lexeme *l = calloc(1, sizeof(Lexeme));
 	*l = (Lexeme) {
 		.type = type,
@@ -61,22 +61,22 @@ void pprintLexeme(Lexeme *l) {
 	printf("%d:%d; type{%d} '%s'\n", l->line, l->col + 1, l->type, l->str);
 }
 
-Tree *makeTree(Lexeme *l) {
-	Tree *t = calloc(1, sizeof(Tree));
-	*t = (Tree) {
+SyntaxTree *makeSyntaxTree(Lexeme *l) {
+	SyntaxTree *t = calloc(1, sizeof(SyntaxTree));
+	*t = (SyntaxTree) {
 		.l = l
 	};
 	pprintLexeme(l); // DEBUG
 	return t;
 }
 
-void pprintTree(Tree *t) {
+void pprintSyntaxTree(SyntaxTree *t) {
 	if (t->l->type == kIdent) {
 		printf("id: '%s' ", t->l->str);
 	} else if (t->l->type == kSexpr) {
 		printf("(");
 		for (int i = 0; i < t->nchild; i++) {
-			pprintTree(t->child[i]);
+			pprintSyntaxTree(t->child[i]);
 		}
 		printf(")");
 	} else if (t->l->type == kRawString) {
@@ -84,30 +84,30 @@ void pprintTree(Tree *t) {
 	}
 }
 
-static void appendTree(Tree *t, Tree *c) {
+static void appendSyntaxTree(SyntaxTree *t, SyntaxTree *c) {
 	t->nchild++;
-	t->child = realloc(t->child, t->nchild * sizeof(Tree*));
+	t->child = realloc(t->child, t->nchild * sizeof(SyntaxTree*));
 	t->child[t->nchild-1] = c;
 }
 
-static TList *makeTList(Tree *t) {
-	TList *tl = calloc(1, sizeof(TList));
-	*tl = (TList) {
+static SyntaxTreeList *makeSyntaxTreeList(SyntaxTree *t) {
+	SyntaxTreeList *tl = calloc(1, sizeof(SyntaxTreeList));
+	*tl = (SyntaxTreeList) {
 		.t = t
 	};
 	return tl;
 }
 
-static void pushTreeState(State *s, Tree *t) {
-	TList *tl = makeTList(t);
+static void pushSyntaxTreeLexerState(LexerState *s, SyntaxTree *t) {
+	SyntaxTreeList *tl = makeSyntaxTreeList(t);
 	(*tl).next = s->nestTrees;
 	s->nestTrees = tl;
 }
 
-static Tree *popTreeState(State *s) {
-	TList *tl = s->nestTrees;
+static SyntaxTree *popSyntaxTreeLexerState(LexerState *s) {
+	SyntaxTreeList *tl = s->nestTrees;
 	s->nestTrees = s->nestTrees->next;
-	Tree *t = tl->t;
+	SyntaxTree *t = tl->t;
 	free(tl);
 	return t;
 }
@@ -124,31 +124,31 @@ static int isdigit(char c) {
 	return c >= '0' && c <= '9';
 }
 
-static void *sexprState(State *s);
-static void *startState(State *s);
+static void *sexprState(LexerState *s);
+static void *startState(LexerState *s);
 
 static int isidentc(char c) {
 	return isletter(c) || isdigit(c) || c == '_';
 }
 
-static void *identState(State *s) {
+static void *identState(LexerState *s) {
 	char c;
 	while ((c = lnext(s)) && isidentc(c)) {}
 	lback(s);
 	if (!c) return NULL; // shall return soon
-	appendTree(s->nestTrees->t, makeTree(makeLexeme(s, kIdent)));
+	appendSyntaxTree(s->nestTrees->t, makeSyntaxTree(makeLexeme(s, kIdent)));
 	return sexprState;
 }
 
-static void *rawStringState(State *s) {
+static void *rawStringState(LexerState *s) {
 	char c;
 	while ((c = lnext(s)) && c != '`') {}
 	if (!c) return NULL; // shall return soon
-	appendTree(s->nestTrees->t, makeTree(makeLexeme(s, kRawString)));
+	appendSyntaxTree(s->nestTrees->t, makeSyntaxTree(makeLexeme(s, kRawString)));
 	return sexprState;
 }
 
-static void *sexprState(State *s) {
+static void *sexprState(LexerState *s) {
 	char c;
 	while ((c = lnext(s))) {
 		if (isws(c)) {
@@ -162,9 +162,9 @@ static void *sexprState(State *s) {
 		} else if (c == '(') {
 			// descend a level
 			s->nestDepth++;
-			Tree *t = makeTree(makeLexeme(s, kSexpr));
-			pushTreeState(s, t);
-			appendTree(s->nestTrees->t, t);
+			SyntaxTree *t = makeSyntaxTree(makeLexeme(s, kSexpr));
+			pushSyntaxTreeLexerState(s, t);
+			appendSyntaxTree(s->nestTrees->t, t);
 			return sexprState;
 		} else if (c == ')') {
 			// ascend a level
@@ -177,7 +177,7 @@ static void *sexprState(State *s) {
 				ldump(s);
 				// No lexeme needed, only action.
 				// Pop from tree list.
-				Tree *t = popTreeState(s);
+				SyntaxTree *t = popSyntaxTreeLexerState(s);
 				if (s->nestDepth == 0) {
 					return startState;
 				} else return sexprState;
@@ -191,14 +191,14 @@ static void *sexprState(State *s) {
 	return NULL;
 }
 
-static void *startState(State *s) {
+static void *startState(LexerState *s) {
 	char c;
 	while ((c = lnext(s))) {
 		if (c == '(') {
 			// opens s-expr
 			s->nestDepth++;
-			s->root = makeTree(makeLexeme(s, kSexpr));
-			pushTreeState(s, s->root);
+			s->root = makeSyntaxTree(makeLexeme(s, kSexpr));
+			pushSyntaxTreeLexerState(s, s->root);
 			return sexprState;
 		} else if (isws(c)) {
 			// whitespace, skip
@@ -212,18 +212,18 @@ static void *startState(State *s) {
 	return NULL;
 }
 
-static void l(State *s) {
+static void l(LexerState *s) {
 	if (s->state == NULL) {
 		s->state = (void *) startState;
 	}
 	for (;;) {
-		void *f = ((void *(*)(State*))s->state)(s);
+		void *f = ((void *(*)(LexerState*))s->state)(s);
 		if (f == NULL) break;
 		s->state = f;
 	}
 }
 
-Tree *lex(State *s, char *src) {
+SyntaxTree *lex(LexerState *s, char *src) {
 	if (s->b == NULL) {
 		s->b = calloc(sizeof(char), strlen(src) + 1);
 		strcpy(s->b, src);
