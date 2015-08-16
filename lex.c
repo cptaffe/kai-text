@@ -1,12 +1,31 @@
 
-// returns 0 on end of string
-static char lnext(LexerState *s) {
+typedef int (*CharacterPredicate)(char);
+
+static char currentLexerState(LexerState *s) {
+	char c = s->s[s->len];
+	if (c == '\0') {
+		return EOF;
+	} else {
+		return c;
+	}
+}
+
+static void backLexerState(LexerState *s);
+
+static char _actionUpToLexerState(LexerState *s, char (*func)(LexerState *), CharacterPredicate predicate) {
+	char c;
+	while ((c = func(s)) != EOF && predicate(c)) {}
+	return c;
+}
+
+// returns EOF on end of string
+static char nextLexerState(LexerState *s) {
 	s->col++;
 	if (s->s == NULL) {
 		s->s = s->b;
 	}
-	char c = s->s[s->len];
-	s->len++;
+	char c = currentLexerState(s);
+	if (c != EOF) s->len++;
 	if (c == '\n') {
 		s->lcol = s->col;
 		s->col = 0;
@@ -15,27 +34,41 @@ static char lnext(LexerState *s) {
 	return c;
 }
 
-static void lback(LexerState *s) {
+static char nextUpToLexerState(LexerState *s, CharacterPredicate predicate) {
+	return _actionUpToLexerState(s, nextLexerState, predicate);
+}
+
+static void backLexerState(LexerState *s) {
 	s->col--;
-	s->len--;
+	if (s->len > 0) s->len--;
 	if (s->s[s->len] == '\n') {
 		s->line--;
 		s->col = s->lcol;
 	}
 }
 
-static char lpeek(LexerState *s) {
-	char c = lnext(s);
-	lback(s);
+static char peekLexerState(LexerState *s) {
+	char c = nextLexerState(s);
+	backLexerState(s);
 	return c;
 }
 
-static void ldump(LexerState *s) {
+static void _dumpLexerState(LexerState *s) {
 	s->s = &s->s[s->len];
 	s->len = 0;
 }
 
-static char *lemit(LexerState *s) {
+static char ignoreLexerState(LexerState *s) {
+	char c = nextLexerState(s);
+	_dumpLexerState(s);
+	return c;
+}
+
+static char ignoreUpToLexerState(LexerState *s, CharacterPredicate predicate) {
+	return _actionUpToLexerState(s, nextLexerState, predicate);
+}
+
+static char *emitLexerState(LexerState *s) {
 	char *str = calloc(sizeof(char), s->len + 1);
 	strncpy(str, s->s, s->len);
 	s->s = &s->s[s->len];
@@ -50,7 +83,7 @@ Lexeme *makeLexeme(LexerState *s, int type) {
 	Lexeme *l = calloc(1, sizeof(Lexeme));
 	*l = (Lexeme) {
 		.type = type,
-		.str = lemit(s),
+		.str = emitLexerState(s),
 		.col = s->col + 1,
 		.line = s->line
 	};
@@ -66,13 +99,12 @@ SyntaxTree *makeSyntaxTree(Lexeme *l) {
 	*t = (SyntaxTree) {
 		.l = l
 	};
-	pprintLexeme(l); // DEBUG
 	return t;
 }
 
 void pprintSyntaxTree(SyntaxTree *t) {
 	if (t->l->type == kIdent) {
-		printf("id: '%s' ", t->l->str);
+		printf("%s", t->l->str);
 	} else if (t->l->type == kSexpr) {
 		printf("(");
 		for (int i = 0; i < t->nchild; i++) {
@@ -80,7 +112,7 @@ void pprintSyntaxTree(SyntaxTree *t) {
 		}
 		printf(")");
 	} else if (t->l->type == kRawString) {
-		printf("rs: %s ", t->l->str);
+		printf("`%s`", t->l->str);
 	}
 }
 
@@ -124,42 +156,50 @@ static int isdigit(char c) {
 	return c >= '0' && c <= '9';
 }
 
-static void *sexprState(LexerState *s);
-static void *startState(LexerState *s);
-
 static int isidentc(char c) {
 	return isletter(c) || isdigit(c) || c == '_';
 }
 
-static void *identState(LexerState *s) {
-	char c;
-	while ((c = lnext(s)) && isidentc(c)) {}
-	lback(s);
-	if (!c) return NULL; // shall return soon
+static int identCharPredicate(char c) {
+	return isidentc(c);
+}
+
+void *identState(LexerState *s) {
+	nextUpToLexerState(s, identCharPredicate);
+	if (currentLexerState(s) == EOF) return NULL; // shall return soon
+	backLexerState(s);
 	appendSyntaxTree(s->nestTrees->t, makeSyntaxTree(makeLexeme(s, kIdent)));
 	return sexprState;
 }
 
-static void *rawStringState(LexerState *s) {
-	char c;
-	while ((c = lnext(s)) && c != '`') {}
-	if (!c) return NULL; // shall return soon
+static int rawStringCharPredicate(char c) {
+	return c != '`';
+}
+
+void *rawStringState(LexerState *s) {
+	nextUpToLexerState(s, rawStringCharPredicate);
+	if (currentLexerState(s) == EOF) return NULL; // shall return soon
+	backLexerState(s); // get off quote
 	appendSyntaxTree(s->nestTrees->t, makeSyntaxTree(makeLexeme(s, kRawString)));
+	ignoreLexerState(s); // drop end quote
 	return sexprState;
 }
 
-static void *sexprState(LexerState *s) {
+void *sexprState(LexerState *s) {
 	char c;
-	while ((c = lnext(s))) {
+	while ((c = peekLexerState(s)) != EOF) {
 		if (isws(c)) {
 			// optional ws
-			ldump(s);
+			ignoreLexerState(s);
 		} else if (isletter(c) || c == '_') {
 			// ident
+			nextLexerState(s);
 			return identState;
 		} else if (c == '`') {
+			ignoreLexerState(s);
 			return rawStringState;
 		} else if (c == '(') {
+			nextLexerState(s);
 			// descend a level
 			s->nestDepth++;
 			SyntaxTree *t = makeSyntaxTree(makeLexeme(s, kSexpr));
@@ -167,14 +207,13 @@ static void *sexprState(LexerState *s) {
 			appendSyntaxTree(s->nestTrees->t, t);
 			return sexprState;
 		} else if (c == ')') {
+			ignoreLexerState(s);
 			// ascend a level
 			s->nestDepth--;
 			if (s->nestDepth < 0) {
 				// too many end parens
-				ldump(s);
 				printf("%d:%d; Too many end parens\n", s->line + 1, s->col - 1);
 			} else {
-				ldump(s);
 				// No lexeme needed, only action.
 				// Pop from tree list.
 				SyntaxTree *t = popSyntaxTreeLexerState(s);
@@ -184,17 +223,18 @@ static void *sexprState(LexerState *s) {
 			}
 		} else {
 			// error
-			ldump(s);
+			ignoreLexerState(s);
 			printf("%d:%d; Looking for atom or ')', found '%c'\n", s->line + 1, s->col - 1, c);
 		}
 	}
 	return NULL;
 }
 
-static void *startState(LexerState *s) {
+void *startState(LexerState *s) {
 	char c;
-	while ((c = lnext(s))) {
+	while ((c = peekLexerState(s)) != EOF) {
 		if (c == '(') {
+			nextLexerState(s);
 			// opens s-expr
 			s->nestDepth++;
 			s->root = makeSyntaxTree(makeLexeme(s, kSexpr));
@@ -202,10 +242,10 @@ static void *startState(LexerState *s) {
 			return sexprState;
 		} else if (isws(c)) {
 			// whitespace, skip
-			ldump(s);
+			ignoreLexerState(s);
 		} else {
 			// error
-			ldump(s);
+			ignoreLexerState(s);
 			printf("%d:%d; Looking for '(' to start s-expression, found '%c'\n", s->line + 1, s->col - 1, c);
 		}
 	}
@@ -225,7 +265,7 @@ static void l(LexerState *s) {
 
 SyntaxTree *lex(LexerState *s, char *src) {
 	if (s->b == NULL) {
-		s->b = calloc(sizeof(char), strlen(src) + 1);
+		s->b = calloc(sizeof(char), strlen(src)+1);
 		strcpy(s->b, src);
 	} else {
 		char *old = s->b;
@@ -235,11 +275,13 @@ SyntaxTree *lex(LexerState *s, char *src) {
 		free(s->b); // free old string
 		s->b = strcat(mem, src); // concatenate new string
 		s->s = s->b;
-		lback(s);
+		backLexerState(s);
 	}
 	l(s);
 	if (s->state == startState) {
-		return s->root;
+		SyntaxTree *t = s->root;
+		s->root = NULL;
+		return t;
 	} else {
 		return NULL;
 	}

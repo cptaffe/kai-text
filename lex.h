@@ -41,4 +41,9 @@ typedef struct {
 Lexeme *makeLexeme(LexerState *s, int type);
 void pprintLexeme(Lexeme *l);
 
+void *startState(LexerState *s);
+void *sexprState(LexerState *s);
+void *rawStringState(LexerState *s);
+void *identState(LexerState *s);
+
 SyntaxTree *lex(LexerState *s, char *src);
