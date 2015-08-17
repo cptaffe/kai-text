@@ -7,7 +7,8 @@ typedef struct {
 		kFloat,
 		kChar,
 		kString,
-		kRawString
+		kRawString,
+		kComment
 	} type;
 	const char *str;
 	int col, line;

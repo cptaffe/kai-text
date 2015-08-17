@@ -102,18 +102,30 @@ SyntaxTree *makeSyntaxTree(Lexeme *l) {
 	return t;
 }
 
-void pprintSyntaxTree(SyntaxTree *t) {
+void _pprintSyntaxTree(SyntaxTree *t) {
 	if (t->l->type == kIdent) {
 		printf("%s", t->l->str);
 	} else if (t->l->type == kSexpr) {
 		printf("(");
 		for (int i = 0; i < t->nchild; i++) {
-			pprintSyntaxTree(t->child[i]);
+			if (i != 0) {
+				printf(" ");
+			}
+			_pprintSyntaxTree(t->child[i]);
 		}
 		printf(")");
 	} else if (t->l->type == kRawString) {
 		printf("`%s`", t->l->str);
+	} else if (t->l->type == kString) {
+		printf("\"%s\"", t->l->str);
+	} else if (t->l->type == kComment) {
+		printf (";%s\n", t->l->str);
 	}
+}
+
+void pprintSyntaxTree(SyntaxTree *t) {
+	_pprintSyntaxTree(t);
+	printf("\n");
 }
 
 static void appendSyntaxTree(SyntaxTree *t, SyntaxTree *c) {
@@ -165,10 +177,19 @@ static int identCharPredicate(char c) {
 }
 
 void *identState(LexerState *s) {
-	nextUpToLexerState(s, identCharPredicate);
-	if (currentLexerState(s) == EOF) return NULL; // shall return soon
+	char c = nextUpToLexerState(s, identCharPredicate);
+	if (c == EOF) return NULL; // shall return soon
 	backLexerState(s);
 	appendSyntaxTree(s->nestTrees->t, makeSyntaxTree(makeLexeme(s, kIdent)));
+	return sexprState;
+}
+
+void *metaStringState(LexerState *s, int type, CharacterPredicate predicate) {
+	nextUpToLexerState(s, predicate);
+	if (currentLexerState(s) == EOF) return NULL; // shall return soon
+	backLexerState(s); // get off quote
+	appendSyntaxTree(s->nestTrees->t, makeSyntaxTree(makeLexeme(s, type)));
+	ignoreLexerState(s); // drop end quote
 	return sexprState;
 }
 
@@ -185,6 +206,38 @@ void *rawStringState(LexerState *s) {
 	return sexprState;
 }
 
+static int stringCharPredicate(char c) {
+	return c != '"' && c != '\n';
+}
+
+void *stringState(LexerState *s) {
+	char c = nextUpToLexerState(s, stringCharPredicate);
+	if (c == EOF) return NULL;
+	if (c == '\n') {
+		// error
+		_dumpLexerState(s);
+		printf("%d:%d; Strings cannot contain newlines, use a Raw String\n", s->line + 1, s->col - 1);
+		return sexprState;
+	}
+	backLexerState(s); // get off quote
+	appendSyntaxTree(s->nestTrees->t, makeSyntaxTree(makeLexeme(s, kString)));
+	ignoreLexerState(s); // drop end quote
+	return sexprState;
+}
+
+static int lineCommentCharPredicate(char c) {
+	return c != '\n';
+}
+
+void *lineCommentState(LexerState *s) {
+	char c = nextUpToLexerState(s, lineCommentCharPredicate);
+	if (c == EOF) return NULL;
+	backLexerState(s); // back off newline
+	appendSyntaxTree(s->nestTrees->t, makeSyntaxTree(makeLexeme(s, kComment)));
+	ignoreLexerState(s); // drop newline
+	return sexprState;
+}
+
 void *sexprState(LexerState *s) {
 	char c;
 	while ((c = peekLexerState(s)) != EOF) {
@@ -198,13 +251,19 @@ void *sexprState(LexerState *s) {
 		} else if (c == '`') {
 			ignoreLexerState(s);
 			return rawStringState;
+		} else if (c == '"') {
+			ignoreLexerState(s);
+			return stringState;
+		} else if (c == ';') {
+			ignoreLexerState(s);
+			return lineCommentState;
 		} else if (c == '(') {
 			nextLexerState(s);
 			// descend a level
 			s->nestDepth++;
 			SyntaxTree *t = makeSyntaxTree(makeLexeme(s, kSexpr));
-			pushSyntaxTreeLexerState(s, t);
 			appendSyntaxTree(s->nestTrees->t, t);
+			pushSyntaxTreeLexerState(s, t);
 			return sexprState;
 		} else if (c == ')') {
 			ignoreLexerState(s);
@@ -216,11 +275,17 @@ void *sexprState(LexerState *s) {
 			} else {
 				// No lexeme needed, only action.
 				// Pop from tree list.
-				SyntaxTree *t = popSyntaxTreeLexerState(s);
+				popSyntaxTreeLexerState(s);
 				if (s->nestDepth == 0) {
 					return startState;
 				} else return sexprState;
 			}
+		} else if (c == ']') {
+			ignoreLexerState(s);
+			for (; s->nestDepth > 0; s->nestDepth--) {
+				popSyntaxTreeLexerState(s);
+			}
+			return startState;
 		} else {
 			// error
 			ignoreLexerState(s);

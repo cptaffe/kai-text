@@ -8,38 +8,27 @@
 void repl() {
 	// constants
 	enum { kLineLen = 0x100 };
-	const char *kPromt = ">>> ";
-	const char *kInSexprPromt = "  | ";
-	const char *kInRawStringPrompt = "  | ";
-	const char *kIdkWherePrompt = "??? ";
 
-	// variables
-	const char *prompt = kPromt;
 	char *line = calloc(sizeof(char), kLineLen);
 	size_t len = kLineLen;
 	LexerState *s = calloc(sizeof(LexerState), 1);
 
 	// repl loop
+	int depth = 0;
 	for (;;) {
-		printf("%s", prompt);
+		if (depth > 0) {
+			printf("%-2d> ", depth);
+		} else {
+			printf (">>> ");
+		}
 		size_t r = getline(&line, &len, stdin);
 		if (r != EOF) {
 			SyntaxTree *t = lex(s, line);
-			if (s->state == sexprState) {
-				prompt = kInSexprPromt;
-			} else if (s->state == rawStringState) {
-				prompt = kInRawStringPrompt;
-			} else if (s->state == startState){
-				if (t != NULL) {
-					printf(": ");
-					pprintSyntaxTree(t);
-					printf("\n");
-				} else {
-					printf("null syntax tree (!)\n");
-				}
-				prompt = kPromt;
+			if (s->state == startState){
+				if (t != NULL) pprintSyntaxTree(t);
+				depth = 0;
 			} else {
-				prompt = kIdkWherePrompt;
+				depth = s->nestDepth;
 			}
 		} else break; // EOF
 	}
