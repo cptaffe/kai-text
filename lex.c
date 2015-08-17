@@ -1,4 +1,41 @@
 
+typedef struct {
+	enum {
+		kIdent,
+		kSexpr,
+		kNum,
+		kFloat,
+		kChar,
+		kString,
+		kRawString,
+		kComment
+	} type;
+	const char *str;
+	int col, line;
+} Lexeme;
+
+typedef struct SyntaxTree {
+	Lexeme *l;
+	struct SyntaxTree **child;
+	int nchild;
+} SyntaxTree;
+
+typedef struct SyntaxTreeList {
+	SyntaxTree *t;
+	struct SyntaxTreeList *next;
+} SyntaxTreeList;
+
+// state of the program
+typedef struct {
+	char *b, *s;
+	int len;
+	int line, lcol, col;
+	int nestDepth;
+	void *state;
+	SyntaxTree *root;
+	SyntaxTreeList *nestTrees;
+} LexerState;
+
 typedef int (*CharacterPredicate)(char);
 
 static char currentLexerState(LexerState *s) {
@@ -117,7 +154,7 @@ void freeSyntaxTree(SyntaxTree *t) {
 	free(t);
 }
 
-void _pprintSyntaxTree(SyntaxTree *t) {
+static void _pprintSyntaxTree(SyntaxTree *t) {
 	if (t->l->type == kIdent) {
 		printf("%s", t->l->str);
 	} else if (t->l->type == kSexpr) {
@@ -187,6 +224,14 @@ static int isidentc(char c) {
 	return isletter(c) || isdigit(c) || c == '_';
 }
 
+// States
+void *identState(LexerState *s);
+void *rawStringState(LexerState *s);
+void *stringState(LexerState *s);
+void *lineCommentState(LexerState *s);
+void *sexprState(LexerState *s);
+void *startState(LexerState *s);
+
 static int identCharPredicate(char c) {
 	return isidentc(c);
 }
@@ -199,7 +244,7 @@ void *identState(LexerState *s) {
 	return sexprState;
 }
 
-void *metaStringState(LexerState *s, int type, CharacterPredicate predicate) {
+static void *metaStringState(LexerState *s, int type, CharacterPredicate predicate) {
 	nextUpToLexerState(s, predicate);
 	if (currentLexerState(s) == EOF) return NULL; // shall return soon
 	backLexerState(s); // get off quote

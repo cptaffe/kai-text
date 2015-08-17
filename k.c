@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "lex.h"
+#include "lex.c"
 
 void repl() {
 	// constants
@@ -44,5 +44,3 @@ void repl() {
 int main() {
 	repl();
 }
-
-#include "lex.c"
