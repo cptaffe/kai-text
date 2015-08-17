@@ -16,7 +16,7 @@ typedef struct {
 
 typedef struct SyntaxTree {
 	Lexeme *l;
-	struct SyntaxTree **child;
+	struct SyntaxTree *sibling, *child;
 	int nchild;
 } SyntaxTree;
 
@@ -132,10 +132,6 @@ void freeLexeme(Lexeme *l) {
 	free(l);
 }
 
-void pprintLexeme(Lexeme *l) {
-	printf("%d:%d; type{%d} '%s'\n", l->line, l->col + 1, l->type, l->str);
-}
-
 SyntaxTree *makeSyntaxTree(Lexeme *l) {
 	SyntaxTree *t = calloc(1, sizeof(SyntaxTree));
 	*t = (SyntaxTree) {
@@ -146,11 +142,9 @@ SyntaxTree *makeSyntaxTree(Lexeme *l) {
 
 void freeSyntaxTree(SyntaxTree *t) {
 	if (t == NULL) return;
-	for (int i = 0; i < t->nchild; i++) {
-		freeSyntaxTree(t->child[i]);
-	}
 	freeLexeme(t->l);
-	free(t->child);
+	freeSyntaxTree(t->child);
+	freeSyntaxTree(t->sibling);
 	free(t);
 }
 
@@ -161,16 +155,12 @@ void freeSyntaxTreeNonRecursive(SyntaxTree *t) {
 }
 
 static void _pprintSyntaxTree(SyntaxTree *t) {
+	if (t == NULL) return;
 	if (t->l->type == kIdent) {
 		printf("%s", t->l->str);
 	} else if (t->l->type == kSexpr) {
 		printf("(");
-		for (int i = 0; i < t->nchild; i++) {
-			if (i != 0) {
-				printf(" ");
-			}
-			_pprintSyntaxTree(t->child[i]);
-		}
+		_pprintSyntaxTree(t->child);
 		printf(")");
 	} else if (t->l->type == kRawString) {
 		printf("`%s`", t->l->str);
@@ -178,6 +168,10 @@ static void _pprintSyntaxTree(SyntaxTree *t) {
 		printf("\"%s\"", t->l->str);
 	} else if (t->l->type == kComment) {
 		printf (";%s\n", t->l->str);
+	}
+	if (t->sibling != NULL) {
+		printf(" ");
+		_pprintSyntaxTree(t->sibling);
 	}
 }
 
@@ -188,8 +182,8 @@ void pprintSyntaxTree(SyntaxTree *t) {
 
 static void appendSyntaxTree(SyntaxTree *t, SyntaxTree *c) {
 	t->nchild++;
-	t->child = realloc(t->child, t->nchild * sizeof(SyntaxTree*));
-	t->child[t->nchild-1] = c;
+	c->sibling = t->child;
+	t->child = c;
 }
 
 static SyntaxTreeList *makeSyntaxTreeList(SyntaxTree *t) {

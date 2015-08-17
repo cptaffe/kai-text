@@ -10,10 +10,6 @@ typedef struct {
 	size_t size;
 } SymbolTable;
 
-typedef struct {
-	SymbolTable *symbols;
-} ParseState;
-
 // Keywords
 typedef enum {
 	kDefine, // defines a variable
@@ -103,75 +99,10 @@ void pprintSymbolTable(SymbolTable *t) {
 	}
 }
 
-ParseState *makeParseState() {
-	enum {
-		kTableSize = 0x100
-	};
-	ParseState *s = calloc(1, sizeof(ParseState));
-	*s = (ParseState) {
-		.symbols = makeSymbolTable(kTableSize)
-	};
-	return s;
-}
+typedef struct ParseTree {
 
-void freeParseState(ParseState *s) {
-	freeSymbolTable(s->symbols);
-	free(s);
-}
+} ParseTree;
 
-// Evaluate builtins
-SyntaxTree *doKeyword(ParseState *s, SyntaxTree *t, Keyword keyword) {
-	if (keyword == kDefine) {
-		// Define
-		// Define(Identifier, Generic)
-		if (t->nchild != 3) {
-			printf("%d:%d; Define takes 2 args not %d\n", t->l->line, t->l->col, t->nchild - 1);
-		} else {
-			if (t->child[1]->l->type != kIdent) {
-				printf("%d:%d; Define, arg %d not Identifier\n", t->l->line, t->l->col, 1);
-			} else {
-				insertSymbolTable(s->symbols, t->child[1]->l->str, t->child[2]);
-				freeSyntaxTree(t->child[0]);
-				freeSyntaxTreeNonRecursive(t);
-				return NULL;
-			}
-		}
-	} else if (keyword == kList) {
-		if (t->nchild < 2) {
-			printf("%d:%d; List takes 1+ args not %d\n", t->l->line, t->l->col, t->nchild - 1);
-		} else {
-			freeSyntaxTree(t->child[0]);
-			size_t size =  (t->nchild-1) * sizeof(SyntaxTree*);
-			memmove(&t->child[0], &t->child[1], size);
-			t->child = realloc(t->child, size);
-			t->nchild--;
-			return t;
-		}
-	} else if (keyword == kQuote) {
-		if (t->nchild != 2) {
-			printf("%d:%d; Quote takes 1 args not %d\n", t->l->line, t->l->col, t->nchild - 1);
-		} else {
-			freeSyntaxTree(t->child[0]);
-			SyntaxTree *tr = t->child[1];
-			freeSyntaxTreeNonRecursive(t);
-			return tr;
-		}
-	}
-	freeSyntaxTree(t);
+ParseTree *parse(SyntaxTree *t) {
 	return NULL;
-}
-
-SyntaxTree *parse(ParseState *s, SyntaxTree *t) {
-	if (t->l->type == kSexpr) {
-		// in s-expression
-		for (int j = 0; j < kMaxKeyword; j++) {
-			if (strcmp(t->child[0]->l->str, kKeywords[j]) == 0) {
-				return doKeyword(s, t, j);
-			}
-		}
-		printf("%d:%d; %s is undefined!\n", t->l->line, t->l->col, t->child[0]->l->str);
-		freeSyntaxTree(t);
-		return NULL;
-	}
-	return t;
 }

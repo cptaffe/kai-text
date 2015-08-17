@@ -13,7 +13,6 @@ void repl() {
 	char *line = calloc(sizeof(char), kLineLen);
 	size_t len = kLineLen;
 	LexerState *s = calloc(sizeof(LexerState), 1);
-	ParseState *ps = makeParseState();
 
 	// repl loop
 	int depth = 0;
@@ -28,9 +27,9 @@ void repl() {
 			SyntaxTree *t = lex(s, line);
 			if (s->state == startState){
 				if (t != NULL) {
-					t = parse(ps, t);
+					// t = parse(t);
 					if (t != NULL) pprintSyntaxTree(t);
-					pprintSymbolTable(ps->symbols);
+					freeSyntaxTree(t);
 				}
 				depth = 0;
 			} else {
@@ -41,7 +40,6 @@ void repl() {
 	printf("\n");
 
 	// cleanup
-	freeParseState(ps);
 	free(s->b);
 	free(line);
 	free(s);
