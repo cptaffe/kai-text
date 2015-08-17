@@ -21,6 +21,7 @@ typedef struct SyntaxTree {
 } SyntaxTree;
 
 SyntaxTree *makeSyntaxTree(Lexeme *l);
+void freeSyntaxTree(SyntaxTree *t);
 void pprintSyntaxTree(SyntaxTree *t);
 
 typedef struct SyntaxTreeList {
@@ -40,6 +41,7 @@ typedef struct {
 } LexerState;
 
 Lexeme *makeLexeme(LexerState *s, int type);
+void freeLexeme(Lexeme *l);
 void pprintLexeme(Lexeme *l);
 
 void *startState(LexerState *s);

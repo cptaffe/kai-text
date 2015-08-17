@@ -90,6 +90,11 @@ Lexeme *makeLexeme(LexerState *s, int type) {
 	return l;
 }
 
+void freeLexeme(Lexeme *l) {
+	free((void *) l->str);
+	free(l);
+}
+
 void pprintLexeme(Lexeme *l) {
 	printf("%d:%d; type{%d} '%s'\n", l->line, l->col + 1, l->type, l->str);
 }
@@ -100,6 +105,16 @@ SyntaxTree *makeSyntaxTree(Lexeme *l) {
 		.l = l
 	};
 	return t;
+}
+
+void freeSyntaxTree(SyntaxTree *t) {
+	if (t == NULL) return;
+	for (int i = 0; i < t->nchild; i++) {
+		freeSyntaxTree(t->child[i]);
+	}
+	freeLexeme(t->l);
+	free(t->child);
+	free(t);
 }
 
 void _pprintSyntaxTree(SyntaxTree *t) {
@@ -317,7 +332,7 @@ void *startState(LexerState *s) {
 	return NULL;
 }
 
-static void l(LexerState *s) {
+static void stateMachine(LexerState *s) {
 	if (s->state == NULL) {
 		s->state = (void *) startState;
 	}
@@ -342,7 +357,7 @@ SyntaxTree *lex(LexerState *s, char *src) {
 		s->s = s->b;
 		backLexerState(s);
 	}
-	l(s);
+	stateMachine(s);
 	if (s->state == startState) {
 		SyntaxTree *t = s->root;
 		s->root = NULL;

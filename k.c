@@ -30,6 +30,7 @@ void repl() {
 			} else {
 				depth = s->nestDepth;
 			}
+			freeSyntaxTree(t);
 		} else break; // EOF
 	}
 	printf("\n");
