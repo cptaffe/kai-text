@@ -154,6 +154,12 @@ void freeSyntaxTree(SyntaxTree *t) {
 	free(t);
 }
 
+void freeSyntaxTreeNonRecursive(SyntaxTree *t) {
+	freeLexeme(t->l);
+	free(t->child);
+	free(t);
+}
+
 static void _pprintSyntaxTree(SyntaxTree *t) {
 	if (t->l->type == kIdent) {
 		printf("%s", t->l->str);
