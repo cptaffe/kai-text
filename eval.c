@@ -18,8 +18,15 @@ typedef enum {
 	kMaxKeyword
 } Keyword;
 
-const char *kKeywords[] = {
+const char *keywords[] = {
 	[kDefine] = "let", // (let ((a 2) (x 3)) ...)
+};
+
+SyntaxTree *evalLet(SyntaxTree *t);
+
+// Evaluator functions for each keyword
+const void *evals[] = {
+	[kDefine] = evalLet
 };
 
 SymbolTable *makeSymbolTable(size_t size) {
@@ -107,8 +114,10 @@ SyntaxTree *_eval(SymbolTable *table, SyntaxTree *t) {
 		if (t->nchild > 0) {
 			// first param should be ident
 			if (t->child->l->type == kIdent) {
-				if (strcmp(t->child->l->str, "let") == 0) {
-					return evalLet(t);
+				for (int i = 0; i < kMaxKeyword; i++) {
+					if (strcmp(t->child->l->str, keywords[i]) == 0) {
+						return ((SyntaxTree *(*)(SyntaxTree *)) evals[i])(t);
+					}
 				}
 			}
 		}
