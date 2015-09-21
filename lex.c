@@ -1,6 +1,7 @@
 
 typedef struct {
 	enum {
+		kError,
 		kIdent,
 		kSexpr,
 		kNum,
@@ -121,8 +122,21 @@ Lexeme *makeLexeme(LexerState *s, int type) {
 	*l = (Lexeme) {
 		.type = type,
 		.str = emitLexerState(s),
-		.col = s->col + 1,
-		.line = s->line
+		.col = s->col,
+		.line = s->line+1
+	};
+	return l;
+}
+
+Lexeme *makeErrorLexeme(int line, int col, char *msg) {
+	Lexeme *l = calloc(1, sizeof(Lexeme));
+	char *str = calloc(strlen(msg)+1, sizeof(char));
+	str = strcpy(str, msg);
+	*l = (Lexeme) {
+		.type = kError,
+		.str = str,
+		.col = col,
+		.line = line
 	};
 	return l;
 }
@@ -168,6 +182,8 @@ static void _pprintSyntaxTree(SyntaxTree *t) {
 		printf("\"%s\"", t->l->str);
 	} else if (t->l->type == kComment) {
 		printf (";%s\n", t->l->str);
+	} else if (t->l->type == kError) {
+		printf("%d:%d; %s", t->l->line, t->l->col, t->l->str);
 	}
 	if (t->sibling != NULL) {
 		printf(" ");

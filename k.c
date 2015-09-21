@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "lex.c"
-#include "parse.c"
+#include "eval.c"
 
 void repl() {
 	// constants
@@ -27,7 +27,7 @@ void repl() {
 			SyntaxTree *t = lex(s, line);
 			if (s->state == startState){
 				if (t != NULL) {
-					// t = parse(t);
+					t = eval(t);
 					if (t != NULL) pprintSyntaxTree(t);
 					freeSyntaxTree(t);
 				}
